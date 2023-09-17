@@ -1,43 +1,51 @@
-import cv2
-import smtplib
 import os
-import speech_recognition as sr
-import pyttsx3
+import cv2
+import boto3
+import pyaudio
+import smtplib
 import pywhatkit
+import pyttsx3 as px
+from twilio.rest import Client
+import speech_recognition as sr
 import datetime
 import wikipedia
-import boto3
-from twilio.rest import Client
+
+rec = sr.Recognizer()
 
 
-listener = sr.Recognizer() #to recogniize voice
-speak = pyttsx3.init()
-voices = speak.getProperty('voices')     #to set all the voices
-speak.setProperty('voice', voices[1].id)  # to speak in female voice
+def ec2launch():
+    session = boto3.Session(aws_access_key_id='acess key id',
+                            aws_secret_access_key='secret key', region_name='region name')
+    launch = session.client('ec2', region_name='region name')
+    launch.run_instances(ImageId="ami-id",
+                         InstanceType="t2.micro",
+                         MaxCount=1,
+                         MinCount=1)
 
-#we are calling the talk fun and when talk fun is called it whatever says the paramenter we are passing the function
 
-def talk(text):
-    speak.say(text)
-    speak.runAndWait()
+def create_s3_bucket():
+    buck = input("enter unique bucket name")
+    session = boto3.Session(aws_access_key_id='acesss key',
+                            aws_secret_access_key='secret key', region_name='region name')
 
-#to ans our ques
-def take_command():
-  command = ""  # Initialize command with an empty string
-    try:
-        with sr.Microphone() as source: # use the microphone
-            print("  listening....")
-            
-#use our microphone as source and calling speechrecognizier to listen this source
-            voice = listener.listen(source)
-            command = listener.recognize_google(voice)
-            command = command.lower()
-            if 'alexa' in command:
-                command = command.replace('alexa','')
-                print(command)
-    except:
-     pass
-    return command
+    bucket = session.client('s3')
+    bucket.create_bucket(
+        Bucket=buck,
+        ACL='private',
+        CreateBucketConfiguration={'LocationConstraint': 'region name'})
+
+
+def simple_message():
+    m = input("enter msg to send")
+    account_sid = 'auth_sid'
+    auth_token = 'auth_token'
+    client = Client(account_sid, auth_token)
+
+    message = client.messages.create(
+        from_='+virtual no from twilio',
+        to='+91 phone no',
+        body=m
+    )
 
 def image_cap():
     cap = cv2.VideoCapture(0)
@@ -46,124 +54,164 @@ def image_cap():
     cv2.imshow("hi", pic)
     cv2.waitKey()
     cv2.destroyAllWindows()
- 
-
-def ec2launch():
-    myec2 = boto3.client("ec2")  # connected with ec2 service in aws directly
-
-    response = myec2.run_instances(ImageId='ami id ',
-                                   InstanceType="t2.micro",
-                                   MaxCount=1,
-                                   MinCount=1
-                                   )
-
-def sms():
-    account_sid = 'account_sid from twilio'
-    auth_token = 'auth_token from twilio'
-    client = Client(account_sid, auth_token)
-
-    message = client.messages.create(
-        from_='virtual number from twilio account ',
-        to='your no with country code',
-        body="msg u want to send"
-    )
-    print("succesfully sent msg")
-
-def create_s3_bucket(bucket_name, region):
-    # Create a new S3 client with the specified region
-    s3 = boto3.client('s3', region_name=region)
-
-    # Create the bucket with the specified region
-    s3.create_bucket(Bucket=bucket_name, CreateBucketConfiguration={'LocationConstraint': region})
-
-    print(f"Bucket '{bucket_name}' created successfully in region '{region}'.")
 
 
-def whatsap():
-    ch=input("enter an no")
-    msg = input("enter msg")
-    pywhatkit.sendwhatmsg_instantly(ch, msg)
-
-def email():
-    from email.message import EmailMessage
-    EMAIL_ADDRESS = os.environ.get('EMAIL_USER')
+def email(to_email, subject, content):
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    EMAIL_ADDRESS = os.environ.get('EMAIL_ADDRESS')
     EMAIL_PASSWORD = os.environ.get('EMAIL_PASS')
-
-    msg = EmailMessage()
-    msg['Subject'] = "holla holla!!"
-    msg['From'] = "sender mail id"
-    msg['To'] = "receiver mail id"
-    msg.set_content(" enter msg u want to send")
-
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
-        smtp.login("sender mail id", 'app password key')
-        smtp.send_message(msg)
+        msg = MIMEMultipart()
+        msg['From'] = 'sender mail id'
+        msg['To'] = to_email
+        msg['Subject'] = subject
+        msg.attach(MIMEText(content, 'plain'))
 
-def run():
-    command = take_command()
-    print(command)
-       if command.startswith("play "):
-        song = command.replace("play ", '')
-        talk("playing " + song)
-        pywhatkit.playonyt(song)
-
-    elif ("chrome") in command:
-        os.system("start chrome")
-        speak.say("chrome has been open")
-        speak.runAndWait()
-
-    elif ("notepad") in command:
-        os.system("notepad")
-        speak.say("notepad has been open")
-        speak.runAndWait()
-
-    elif 'time' in command:
-        time = datetime.datetime.now().strftime('%I %M  %p')
-        print(time)
-        talk('current time is' + time)
-
-    elif  ('information')in command:
-            person = command.replace('information',' ')
-            info = wikipedia.summary(person,3)
-            print(info)
-            talk(info)
-
-    elif ("whatsapp" ) in command:
-        whatsap()
-        speak.say("Message has been sent on whatsapp")
-        speak.runAndWait()
-
-    elif ("click picture") in command:
-        image_cap()
-        speak.say("picture clicked")
-        speak.runAndWait()
-
-    elif ("send mail" ) in command:
-        email()
-        speak.say("email has been sent on mail")
-        speak.runAndWait()
-
-    elif ("send sms")in command:
-        sms()
-        speak.say("Message had been sent through sms")
-        speak.runAndWait()
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login("sender mail id",'app pw key')
+        text = msg.as_string()
+        server.sendmail('sender mail id', to_email, text)
+        server.quit()
 
 
+def check_status(text, open_list, not_list):
+    isPresent = False
+    for t in open_list:
+        if t in text:
+            isPresent = True
+            break
 
-    elif ("launch instatance") in command:
-        ec2launch()
-        speak.say('instance launched')
-        speak.runAndWait()
+    for t in not_list:
+        if t in text:
+            isPresent = False
+            break
 
-   
-    elif ("create s3 bucket")in command:
-        create_s3_bucket("mybucket", "ap-south-1")
-        speak.say("bucket has been created with name mybucket")
-        speak.runAndWait()
-
-    else:
-        talk("please say again!")
+    return isPresent
 
 
-while True:
-    run()
+isSpeaking = True
+while isSpeaking:
+    with sr.Microphone() as mic:
+        spk = px.init()
+        spk.setProperty('rate', 150)
+        spk.setProperty('Volume', 1.0)
+        spk.say("say something ")
+        spk.runAndWait()
+        print("speak")
+        audio = rec.listen(mic)
+        try:
+            choice = rec.recognize_google(audio)
+            text = choice.lower()
+            # text = choice.split(" ")
+            print("you might have said : ", text, end="\n\n")
+
+            open_statements = ["open", "start", "launch", "run", "create", "send","click"]
+            not_statements = ["dont", "don't", "do not", "not", "never", "donot"]
+            exit_statements = ["exit", "quit", "close", "stop", "terminate", "end", "finish", "bye", "goodbye",
+                               "see you", "bye", "later", "soon"]
+
+            if "chrome" in text:
+                if not check_status(text, open_statements, not_statements):
+                    spk.say("okay!")
+                    spk.runAndWait()
+
+                else:
+                    os.system("start chrome")
+                    spk.say("chrome has been opened.")
+                    spk.runAndWait()
+
+            elif "notepad" in text:
+                    os.system("notepad")
+                    spk.say("notepad has been opened.")
+                    spk.runAndWait()
+
+            elif "ec2 instance" in text:
+                    ec2launch()
+                    spk.say("ec2 instance has been launched. check on your aws console.")
+                    spk.runAndWait()
+
+            elif "whatsapp" in text:
+                if not check_status(text, open_statements, not_statements):
+                    spk.say("okay!")
+                    spk.runAndWait()
+
+                else:
+                    number = input("Enter the number : ")
+                    message = input("Enter the message : ")
+                    pywhatkit.sendwhatmsg_instantly("+91" + number, message)
+                    spk.say("Message has been sent on whatsapp")
+                    spk.runAndWait()
+
+            elif "email" in text:
+                if not check_status(text, open_statements, not_statements):
+                    spk.say("okay!")
+                    spk.runAndWait()
+
+                else:
+                    to = input("Enter the email address : ")
+                    subject = input("Enter the subject : ")
+                    content = input("Enter the body of the email : ")
+                    email(to, subject, content)
+                    spk.say("email has been sent on mail")
+                    spk.runAndWait()
+
+            elif "message" in text:
+                if not check_status(text, open_statements, not_statements):
+                    spk.say("okay!")
+                    spk.runAndWait()
+
+                else:
+                  #  n = input("Enter the number : ")
+                 #   m = input("Enter message to be sent : ")
+                    simple_message()
+                    spk.say("Message has been sent through simple message")
+                    spk.runAndWait()
+
+
+
+            elif "s3 bucket" in text:
+                    create_s3_bucket()
+                    spk.say("bucket has been created ")
+                    spk.runAndWait()
+
+            elif "camera" in text:
+                image_cap()
+                spk.say("picture clicked")
+                spk.runAndWait()
+                
+            elif "play" in text:
+                                                         # if command.startswith("play "):
+                song = text.replace("play ", '')
+                pywhatkit.playonyt(song)
+                spk.say("song has been played")
+                spk.runAndWait()
+                
+            elif "information" in text:
+                person = text.replace('information',' ')
+                info = wikipedia.summary(person,3)
+                print(info)
+                spk.say(info)
+                spk.runAndWait()
+                
+            elif "time" in text:
+                time = datetime.datetime.now().strftime('%I %M  %p')
+                print(time)
+                spk.say("curent time"+ time)
+                spk.runAndWait()
+        
+           
+            else:
+                if not check_status(text, exit_statements, not_statements):
+                    spk.say("Okay!")
+                    spk.runAndWait()
+
+                else:
+                    isSpeaking = False
+                    spk.say("Thank you for using me")
+                    spk.runAndWait()
+                    break
+
+        except Exception as err:
+            print("Error : ", err, end="\n\n")
