@@ -8,6 +8,7 @@ import pyttsx3 as px
 from twilio.rest import Client
 import speech_recognition as sr
 import datetime
+from datetime import date
 import wikipedia
 
 rec = sr.Recognizer()
@@ -199,6 +200,12 @@ while isSpeaking:
                 time = datetime.datetime.now().strftime('%I %M  %p')
                 print(time)
                 spk.say("curent time"+ time)
+                spk.runAndWait()
+
+            elif "date" in text: 
+                date =date.today()
+                print(date)
+                spk.say(date)
                 spk.runAndWait()
         
            
